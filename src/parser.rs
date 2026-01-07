@@ -1,14 +1,12 @@
 // sentiric-sip-core/src/parser.rs
 
 use crate::packet::{SipPacket, Method};
-use crate::header::{Header, HeaderName};
-use crate::error::SipError; // YENI HATA TİPİ
+use crate::header::Header; // DÜZELTME: HeaderName kaldırıldı
+use crate::error::SipError;
 use std::str;
 
-// Eski ParseError enum'ını kaldırıyoruz çünkü SipError kullanacağız.
-
 pub fn parse(data: &[u8]) -> Result<SipPacket, SipError> {
-    let text = str::from_utf8(data)?; // Otomatik dönüşüm (From impl sayesinde)
+    let text = str::from_utf8(data)?;
     
     // Header ve Body ayrımı (Çift CRLF)
     let mut parts = text.splitn(2, "\r\n\r\n");
