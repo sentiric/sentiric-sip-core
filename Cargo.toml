@@ -1,0 +1,9 @@
+[package]
+name = "sentiric-sip-core"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance, zero-dependency SIP (RFC 3261) parser and builder core."
+authors = ["Sentiric Team"]
+
+# Harici hiçbir crate kullanmıyoruz. Tam kontrol bizde.
+[dependencies]
