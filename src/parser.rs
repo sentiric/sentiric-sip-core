@@ -2,11 +2,13 @@
 
 use crate::packet::{SipPacket, Method};
 use crate::header::{Header, HeaderName};
-use crate::error::SipError;
+use crate::error::SipError; // YENI HATA TİPİ
 use std::str;
 
+// Eski ParseError enum'ını kaldırıyoruz çünkü SipError kullanacağız.
+
 pub fn parse(data: &[u8]) -> Result<SipPacket, SipError> {
-    let text = str::from_utf8(data)?;
+    let text = str::from_utf8(data)?; // Otomatik dönüşüm (From impl sayesinde)
     
     // Header ve Body ayrımı (Çift CRLF)
     let mut parts = text.splitn(2, "\r\n\r\n");
@@ -56,8 +58,9 @@ pub fn parse(data: &[u8]) -> Result<SipPacket, SipError> {
         }
     }
 
-    // Body
+    // Body Varsa Ekle
     if let Some(body) = body_part {
+        // null byte'ları temizle
         let trimmed_body = body.trim_end_matches(char::from(0));
         packet.body = trimmed_body.as_bytes().to_vec();
     }
