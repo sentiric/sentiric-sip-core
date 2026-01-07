@@ -1,40 +1,37 @@
-// src/parser.rs
+// sentiric-sip-core/src/parser.rs
 
 use crate::packet::{SipPacket, Method};
 use crate::header::{Header, HeaderName};
+use crate::error::SipError;
 use std::str;
 
-#[derive(Debug)]
-pub enum ParseError {
-    Utf8Error,
-    EmptyPacket,
-    InvalidStartLine,
-}
-
-pub fn parse(data: &[u8]) -> Result<SipPacket, ParseError> {
-    let text = str::from_utf8(data).map_err(|_| ParseError::Utf8Error)?;
+pub fn parse(data: &[u8]) -> Result<SipPacket, SipError> {
+    let text = str::from_utf8(data)?;
     
     // Header ve Body ayrımı (Çift CRLF)
     let mut parts = text.splitn(2, "\r\n\r\n");
-    let head_part = parts.next().ok_or(ParseError::EmptyPacket)?;
-    let body_part = parts.next(); // Opsiyonel
+    let head_part = parts.next().ok_or(SipError::ParseError("Boş paket".into()))?;
+    let body_part = parts.next();
 
     let mut lines = head_part.lines();
-    let start_line = lines.next().ok_or(ParseError::EmptyPacket)?;
+    let start_line = lines.next().ok_or(SipError::ParseError("Start line eksik".into()))?;
 
     // Request mi Response mu?
     let mut packet = if start_line.starts_with("SIP/2.0") {
-        // RESPONSE: "SIP/2.0 200 OK"
+        // RESPONSE
         let mut sl_parts = start_line.splitn(3, ' ');
         let _ver = sl_parts.next();
-        let code = sl_parts.next().ok_or(ParseError::InvalidStartLine)?.parse::<u16>().unwrap_or(0);
+        let code = sl_parts.next()
+            .ok_or(SipError::ParseError("Status code eksik".into()))?
+            .parse::<u16>()
+            .map_err(|_| SipError::ParseError("Geçersiz status code".into()))?;
         let reason = sl_parts.next().unwrap_or("").to_string();
         SipPacket::new_response(code, reason)
     } else {
-        // REQUEST: "INVITE sip:x@y SIP/2.0"
+        // REQUEST
         let mut sl_parts = start_line.splitn(3, ' ');
-        let method_str = sl_parts.next().ok_or(ParseError::InvalidStartLine)?;
-        let uri = sl_parts.next().ok_or(ParseError::InvalidStartLine)?.to_string();
+        let method_str = sl_parts.next().ok_or(SipError::ParseError("Method eksik".into()))?;
+        let uri = sl_parts.next().ok_or(SipError::ParseError("URI eksik".into()))?.to_string();
         
         let method = match method_str {
             "INVITE" => Method::Invite,
@@ -59,9 +56,8 @@ pub fn parse(data: &[u8]) -> Result<SipPacket, ParseError> {
         }
     }
 
-    // Body Varsa Ekle
+    // Body
     if let Some(body) = body_part {
-        // null byte'ları temizle (bazen UDP paketinin sonunda gelebilir)
         let trimmed_body = body.trim_end_matches(char::from(0));
         packet.body = trimmed_body.as_bytes().to_vec();
     }
