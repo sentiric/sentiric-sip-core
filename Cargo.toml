@@ -1,6 +1,6 @@
 [package]
 name = "sentiric-sip-core"
-version = "1.0.0"
+version = "1.1.0"  # <--- BUMP
 edition = "2021"
 description = "High-performance, zero-dependency SIP (RFC 3261) parser and builder core. Production Stable."
 authors = ["Sentiric Team"]
