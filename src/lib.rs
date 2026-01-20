@@ -5,9 +5,13 @@ pub mod packet;
 pub mod parser;
 pub mod uri;
 pub mod utils;
-pub mod error; // EKLENDI
+pub mod error;
+pub mod profiles;  // EKLENDİ
+pub mod transport; // EKLENDİ
 
 pub use header::{Header, HeaderName};
 pub use packet::{SipPacket, Method, Version};
 pub use uri::SipUri;
-pub use error::SipError; // EKLENDI
+pub use error::SipError;
+pub use profiles::{SipProfile, create_profile}; // EKLENDİ
+pub use transport::SipTransport; // EKLENDİ

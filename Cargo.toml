@@ -1,10 +1,13 @@
 [package]
 name = "sentiric-sip-core"
-version = "1.1.0"  # <--- BUMP
+version = "1.2.0"
 edition = "2021"
-description = "High-performance, zero-dependency SIP (RFC 3261) parser and builder core. Production Stable."
+description = "High-performance SIP (RFC 3261) engine with vendor profiles and async transport."
 authors = ["Sentiric Team"]
 license = "AGPL-3.0"
 
-# Harici hiçbir crate kullanmıyoruz. Tam kontrol bizde.
 [dependencies]
+# Async I/O ve Zamanlama
+tokio = { version = "1", features = ["net", "sync", "rt", "time"] }
+# Yapılandırılmış Loglama
+tracing = "0.1"
