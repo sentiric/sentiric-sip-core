@@ -18,12 +18,23 @@ pub fn generate_tag(seed: &str) -> String {
 }
 
 pub fn extract_aor(raw_val: &str) -> String {
+    // 1. ÖNCE TEMİZLİK: < ve > karakterlerinden kurtul.
     let clean_str = raw_val.replace('<', "").replace('>', "");
-    let start = clean_str.find("sip:").map(|i| i + 4).unwrap_or(0);
-    let end = clean_str[start..].find(';').map(|i| start + i).unwrap_or(clean_str.len());
     
-    let clean_uri = &clean_str[start..end];
+    // 2. "sip:" veya "sips:" başlangıcını bul ve atla.
+    let no_scheme = if let Some(stripped) = clean_str.strip_prefix("sip:") {
+        stripped
+    } else if let Some(stripped) = clean_str.strip_prefix("sips:") {
+        stripped
+    } else {
+        &clean_str
+    };
+
+    // 3. Parametreleri (; ile başlar) at
+    let end = no_scheme.find(';').unwrap_or(no_scheme.len());
+    let clean_uri = &no_scheme[..end];
     
+    // 4. Port varsa temizle
     if let Some(at_pos) = clean_uri.find('@') {
         if let Some(colon_pos) = clean_uri[at_pos..].find(':') {
             let absolute_colon = at_pos + colon_pos;
