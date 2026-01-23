@@ -3,7 +3,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-// Regex bağımlılığına gerek kalmadı, manuel parsing daha güvenli ve hızlı.
 
 pub fn generate_branch_id() -> String {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
@@ -19,42 +18,24 @@ pub fn generate_tag(seed: &str) -> String {
 }
 
 pub fn extract_aor(uri: &str) -> String {
-    // Örnek Girdiler:
-    // 1. "Azmi" <sip:1001@1.2.3.4>;tag=...
-    // 2. <sip:1001@1.2.3.4>
-    // 3. sip:1001@1.2.3.4
-    // 4. 1001@1.2.3.4
+    // 1. "sip:" veya "sips:" başlangıcını bul. Yoksa stringin başından başla.
+    let start_idx = uri.find("sip").unwrap_or(0);
+    let working_slice = &uri[start_idx..];
 
-    // Adım 1: "sip:" ön ekini bul
-    let start_idx = if let Some(idx) = uri.find("sip:") {
-        idx + 4
-    } else {
-        0
-    };
+    // 2. İlk yasaklı karakteri bul (Bitiş noktası)
+    // > : Header bitişi (<sip:...>)
+    // ; : Parametre başlangıcı (sip:...;transport=udp)
+    // ? : Header parametreleri (sip:...?)
+    // Boşluk : Hatalı format
+    let end_idx = working_slice.find(|c| c == '>' || c == ';' || c == '?' || c == ' ').unwrap_or(working_slice.len());
 
-    let remainder = &uri[start_idx..];
-
-    // Adım 2: Bitiş karakterlerini bul (>, ;, boşluk)
-    // En erken hangisi gelirse orada kes.
-    let end_idx = remainder.find(|c| c == '>' || c == ';' || c == ' ').unwrap_or(remainder.len());
+    // 3. Kes ve Döndür
+    let clean_aor = &working_slice[..end_idx];
     
-    let mut clean_aor = remainder[..end_idx].to_string();
-
-    // Adım 3: Port temizliği (İsteğe bağlı, AOR genelde portsuzdur ama bazen portlu kaydedilir)
-    // AOR standardı gereği user@domain olmalı.
-    
-    // Eğer user part varsa (user@domain)
-    if let Some(at_idx) = clean_aor.find('@') {
-         // Domain kısmında port var mı? (user@domain:port)
-         // IPv6 ([...]) hariç tutmak için basit kontrol: son ':' '@'den sonra mı?
-         if let Some(colon_idx) = clean_aor.rfind(':') {
-             if colon_idx > at_idx {
-                 // Portu at
-                 clean_aor = clean_aor[..colon_idx].to_string();
-             }
-         }
+    // Güvenlik: Eğer sonuçta hala @ yoksa veya boşsa, ham halini döndür (logda hatayı görmek için)
+    if !clean_aor.contains('@') && !clean_aor.is_empty() {
+         return clean_aor.to_string();
     }
 
-    // Son temizlik (Trim)
-    clean_aor.trim().to_string()
+    clean_aor.to_string()
 }
