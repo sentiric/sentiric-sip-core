@@ -1,8 +1,10 @@
 // sentiric-sip-core/src/utils.rs
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use once_cell::sync::Lazy;
+use regex::Regex;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn generate_branch_id() -> String {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
@@ -17,32 +19,33 @@ pub fn generate_tag(seed: &str) -> String {
     format!("{:x}", hasher.finish())
 }
 
+// Regex ile URI ayrıştırma. Sadece bir kez derlenir.
+static AOR_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?i)\s*"?([^"]*)"?\s*<sips?:([^>]+)>|sips?:([\w.-]+@[\w.-]+)"#).unwrap()
+});
+
 pub fn extract_aor(raw_val: &str) -> String {
-    // 1. ÖNCE TEMİZLİK: < ve > karakterlerinden kurtul.
-    let clean_str = raw_val.replace('<', "").replace('>', "");
-    
-    // 2. "sip:" veya "sips:" başlangıcını bul ve atla.
-    let no_scheme = if let Some(stripped) = clean_str.strip_prefix("sip:") {
-        stripped
-    } else if let Some(stripped) = clean_str.strip_prefix("sips:") {
-        stripped
-    } else {
-        &clean_str
-    };
-
-    // 3. Parametreleri (; ile başlar) at
-    let end = no_scheme.find(';').unwrap_or(no_scheme.len());
-    let clean_uri = &no_scheme[..end];
-    
-    // 4. Port varsa temizle
-    if let Some(at_pos) = clean_uri.find('@') {
-        if let Some(colon_pos) = clean_uri[at_pos..].find(':') {
-            let absolute_colon = at_pos + colon_pos;
-            return clean_uri[..absolute_colon].to_string();
+    if let Some(caps) = AOR_REGEX.captures(raw_val) {
+        // "<sip:user@domain>" formatını yakala
+        if let Some(addr_spec) = caps.get(2) {
+            let mut aor = addr_spec.as_str().to_string();
+            // Portu temizle
+            if let Some(at_pos) = aor.find('@') {
+                if let Some(colon_pos) = aor[at_pos..].find(':') {
+                    aor.truncate(at_pos + colon_pos);
+                }
+            }
+            return aor;
         }
-    } else if let Some(colon_pos) = clean_uri.find(':') {
-        return clean_uri[..colon_pos].to_string();
+        // "sip:user@domain" formatını yakala
+        if let Some(addr_spec) = caps.get(3) {
+            return addr_spec.as_str().to_string();
+        }
     }
-
-    clean_uri.to_string()
+    // Hiçbir şey eşleşmezse, en iyi tahmin olarak ham değeri temizle.
+    raw_val
+        .replace('<', "")
+        .replace('>', "")
+        .trim()
+        .to_string()
 }
