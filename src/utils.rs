@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 use regex::Regex;
 use once_cell::sync::Lazy;
 
-// [FIX] Daha sağlam Regex: <sip:...> veya sip:... formatlarını destekler
+// Regex güncellendi: < ve > karakterlerini dışlayan gruplar
 static SIP_URI_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"sip:([^@;>]+)@([^;>]+)").unwrap());
 
 pub fn generate_branch_id() -> String {
@@ -23,12 +23,15 @@ pub fn generate_tag(seed: &str) -> String {
 }
 
 pub fn extract_aor(uri: &str) -> String {
-    // Regex ile temiz ayrıştırma
-    if let Some(caps) = SIP_URI_RE.captures(uri) {
+    // 1. Temizlik: Başındaki/Sonundaki boşlukları ve < > karakterlerini at.
+    let clean_uri = uri.trim().trim_matches(|c| c == '<' || c == '>');
+
+    // 2. Regex ile Ayrıştırma
+    if let Some(caps) = SIP_URI_RE.captures(clean_uri) {
         let user = caps.get(1).map_or("", |m| m.as_str());
         let host = caps.get(2).map_or("", |m| m.as_str());
         
-        // Host içinde port varsa temizle (örn: host:5060)
+        // Host içinde port varsa temizle (örn: host:5060 -> host)
         let clean_host = if let Some(idx) = host.find(':') {
              &host[..idx]
         } else {
@@ -37,20 +40,18 @@ pub fn extract_aor(uri: &str) -> String {
         return format!("{}@{}", user, clean_host);
     }
 
-    // Fallback (Manuel parsing) - Daha güvenli hale getirildi
-    let start = uri.find("sip:").map(|i| i + 4).unwrap_or(0);
-    // Bitiş karakterleri: ; veya > veya string sonu
-    let end = uri.find(|c| c == ';' || c == '>').unwrap_or(uri.len());
+    // 3. Fallback (Manuel parsing) - Regex başarısız olursa
+    let start = clean_uri.find("sip:").map(|i| i + 4).unwrap_or(0);
+    let end = clean_uri.find(';').unwrap_or(clean_uri.len());
+    let bare = &clean_uri[start..end];
     
-    let clean = &uri[start..end];
-    
-    // Port varsa temizle
-    if let Some(colon) = clean.rfind(':') {
-        if let Some(at) = clean.find('@') {
+    // Port temizliği
+    if let Some(colon) = bare.rfind(':') {
+        if let Some(at) = bare.find('@') {
             if colon > at {
-                return clean[..colon].to_string();
+                return bare[..colon].to_string();
             }
         }
     }
-    clean.to_string()
+    bare.to_string()
 }

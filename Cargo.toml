@@ -1,6 +1,6 @@
 [package]
 name = "sentiric-sip-core"
-version = "1.2.1"
+version = "1.2.2"  # v1.2.1 -> v1.2.2
 edition = "2021"
 description = "High-performance SIP (RFC 3261) engine with vendor profiles and async transport."
 authors = ["Sentiric Team"]
