@@ -3,11 +3,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use regex::Regex;
-use once_cell::sync::Lazy;
-
-// Regex güncellendi: < ve > karakterlerini dışlayan gruplar
-static SIP_URI_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"sip:([^@;>]+)@([^;>]+)").unwrap());
+// Regex bağımlılığına gerek kalmadı, manuel parsing daha güvenli ve hızlı.
 
 pub fn generate_branch_id() -> String {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
@@ -23,35 +19,42 @@ pub fn generate_tag(seed: &str) -> String {
 }
 
 pub fn extract_aor(uri: &str) -> String {
-    // 1. Temizlik: Başındaki/Sonundaki boşlukları ve < > karakterlerini at.
-    let clean_uri = uri.trim().trim_matches(|c| c == '<' || c == '>');
+    // Örnek Girdiler:
+    // 1. "Azmi" <sip:1001@1.2.3.4>;tag=...
+    // 2. <sip:1001@1.2.3.4>
+    // 3. sip:1001@1.2.3.4
+    // 4. 1001@1.2.3.4
 
-    // 2. Regex ile Ayrıştırma
-    if let Some(caps) = SIP_URI_RE.captures(clean_uri) {
-        let user = caps.get(1).map_or("", |m| m.as_str());
-        let host = caps.get(2).map_or("", |m| m.as_str());
-        
-        // Host içinde port varsa temizle (örn: host:5060 -> host)
-        let clean_host = if let Some(idx) = host.find(':') {
-             &host[..idx]
-        } else {
-            host
-        };
-        return format!("{}@{}", user, clean_host);
-    }
+    // Adım 1: "sip:" ön ekini bul
+    let start_idx = if let Some(idx) = uri.find("sip:") {
+        idx + 4
+    } else {
+        0
+    };
 
-    // 3. Fallback (Manuel parsing) - Regex başarısız olursa
-    let start = clean_uri.find("sip:").map(|i| i + 4).unwrap_or(0);
-    let end = clean_uri.find(';').unwrap_or(clean_uri.len());
-    let bare = &clean_uri[start..end];
+    let remainder = &uri[start_idx..];
+
+    // Adım 2: Bitiş karakterlerini bul (>, ;, boşluk)
+    // En erken hangisi gelirse orada kes.
+    let end_idx = remainder.find(|c| c == '>' || c == ';' || c == ' ').unwrap_or(remainder.len());
     
-    // Port temizliği
-    if let Some(colon) = bare.rfind(':') {
-        if let Some(at) = bare.find('@') {
-            if colon > at {
-                return bare[..colon].to_string();
-            }
-        }
+    let mut clean_aor = remainder[..end_idx].to_string();
+
+    // Adım 3: Port temizliği (İsteğe bağlı, AOR genelde portsuzdur ama bazen portlu kaydedilir)
+    // AOR standardı gereği user@domain olmalı.
+    
+    // Eğer user part varsa (user@domain)
+    if let Some(at_idx) = clean_aor.find('@') {
+         // Domain kısmında port var mı? (user@domain:port)
+         // IPv6 ([...]) hariç tutmak için basit kontrol: son ':' '@'den sonra mı?
+         if let Some(colon_idx) = clean_aor.rfind(':') {
+             if colon_idx > at_idx {
+                 // Portu at
+                 clean_aor = clean_aor[..colon_idx].to_string();
+             }
+         }
     }
-    bare.to_string()
+
+    // Son temizlik (Trim)
+    clean_aor.trim().to_string()
 }
