@@ -19,31 +19,29 @@ pub fn generate_tag(seed: &str) -> String {
 
 pub fn extract_aor(raw_val: &str) -> String {
     // DEBUG: Gelen ham veriyi görelim
-    println!("DEBUG_AOR_RAW: '{}'", raw_val);
-
-    // 1. Basit Temizlik (Trim ve < > kaldır)
-    let mut clean = raw_val.trim().to_string();
-    clean = clean.replace("<", "").replace(">", "");
-
-    // 2. "sip:" ile başlamıyorsa ekle (Standardizasyon)
-    if !clean.starts_with("sip:") && !clean.starts_with("sips:") {
-         // Eğer raw değer "Azmi" <sip:1001...> formatındaysa, replace sonrası bozulmuş olabilir.
-         // Bu yüzden tekrar sip: arayalım.
-         if let Some(idx) = clean.find("sip:") {
-             clean = clean[idx..].to_string();
-         } else {
-             // Hiç sip: yoksa, biz ekleyelim (Blind fix)
-             clean = format!("sip:{}", clean);
-         }
+    println!("DEBUG_AOR_RAW: '{}'", raw_val.to_string());    
+    // 1. ÖNCE TEMİZLİK: < ve > karakterlerinden kurtul.
+    let clean_str = raw_val.replace('<', "").replace('>', "");
+    
+    // 2. "sip:" başlangıcını bul
+    let start = clean_str.find("sip:").map(|i| i + 4).unwrap_or(0);
+    
+    // 3. Parametreleri (; ile başlar) at
+    let end = clean_str[start..].find(';').map(|i| start + i).unwrap_or(clean_str.len());
+    
+    let clean_uri = &clean_str[start..end];
+    
+    // 4. Port varsa temizle
+    if let Some(at_pos) = clean_uri.find('@') {
+        if let Some(colon_pos) = clean_uri[at_pos..].find(':') {
+            let absolute_colon = at_pos + colon_pos;
+            return clean_uri[..absolute_colon].to_string();
+        }
+    } else if let Some(colon_pos) = clean_uri.find(':') {
+        return clean_uri[..colon_pos].to_string();
     }
 
-    // 3. Parametreleri at (; sonrası çöp)
-    if let Some(idx) = clean.find(';') {
-        clean = clean[..idx].to_string();
-    }
-
+    clean_uri.to_string()
     // DEBUG: Çıkan sonucu görelim
-    println!("DEBUG_AOR_CLEAN: '{}'", clean);
-
-    clean
+    println!("DEBUG_AOR_CLEAN: '{}'", clean_uri.to_string());
 }
