@@ -17,25 +17,33 @@ pub fn generate_tag(seed: &str) -> String {
     format!("{:x}", hasher.finish())
 }
 
-pub fn extract_aor(uri: &str) -> String {
-    // 1. "sip:" veya "sips:" başlangıcını bul. Yoksa stringin başından başla.
-    let start_idx = uri.find("sip").unwrap_or(0);
-    let working_slice = &uri[start_idx..];
+pub fn extract_aor(raw_val: &str) -> String {
+    // DEBUG: Gelen ham veriyi görelim
+    println!("DEBUG_AOR_RAW: '{}'", raw_val);
 
-    // 2. İlk yasaklı karakteri bul (Bitiş noktası)
-    // > : Header bitişi (<sip:...>)
-    // ; : Parametre başlangıcı (sip:...;transport=udp)
-    // ? : Header parametreleri (sip:...?)
-    // Boşluk : Hatalı format
-    let end_idx = working_slice.find(|c| c == '>' || c == ';' || c == '?' || c == ' ').unwrap_or(working_slice.len());
+    // 1. Basit Temizlik (Trim ve < > kaldır)
+    let mut clean = raw_val.trim().to_string();
+    clean = clean.replace("<", "").replace(">", "");
 
-    // 3. Kes ve Döndür
-    let clean_aor = &working_slice[..end_idx];
-    
-    // Güvenlik: Eğer sonuçta hala @ yoksa veya boşsa, ham halini döndür (logda hatayı görmek için)
-    if !clean_aor.contains('@') && !clean_aor.is_empty() {
-         return clean_aor.to_string();
+    // 2. "sip:" ile başlamıyorsa ekle (Standardizasyon)
+    if !clean.starts_with("sip:") && !clean.starts_with("sips:") {
+         // Eğer raw değer "Azmi" <sip:1001...> formatındaysa, replace sonrası bozulmuş olabilir.
+         // Bu yüzden tekrar sip: arayalım.
+         if let Some(idx) = clean.find("sip:") {
+             clean = clean[idx..].to_string();
+         } else {
+             // Hiç sip: yoksa, biz ekleyelim (Blind fix)
+             clean = format!("sip:{}", clean);
+         }
     }
 
-    clean_aor.to_string()
+    // 3. Parametreleri at (; sonrası çöp)
+    if let Some(idx) = clean.find(';') {
+        clean = clean[..idx].to_string();
+    }
+
+    // DEBUG: Çıkan sonucu görelim
+    println!("DEBUG_AOR_CLEAN: '{}'", clean);
+
+    clean
 }
