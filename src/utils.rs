@@ -49,3 +49,24 @@ pub fn extract_aor(raw_val: &str) -> String {
         .trim()
         .to_string()
 }
+
+/// URI'den sadece kullanıcı adını çeker.
+/// Örnek: "sip:2001@domain.com" -> "2001"
+pub fn extract_username_from_uri(uri: &str) -> String {
+    let clean = uri.trim();
+    // sip: prefixini at
+    let without_scheme = if let Some(idx) = clean.find(':') {
+        &clean[idx+1..]
+    } else {
+        clean
+    };
+    
+    // @ işaretine kadar al
+    if let Some(idx) = without_scheme.find('@') {
+        without_scheme[..idx].to_string()
+    } else {
+        without_scheme.to_string() // Domain yoksa kendisi kullanıcıdır (nadiren)
+    }
+    .replace('<', "") // Köşeli parantez kalıntılarını temizle
+    .replace('>', "")
+}
