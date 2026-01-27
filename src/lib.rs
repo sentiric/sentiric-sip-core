@@ -8,6 +8,8 @@ pub mod utils;
 pub mod error;
 pub mod profiles;  // EKLENDİ
 pub mod transport; // EKLENDİ
+pub mod builder;   // ✅ YENİ: SIP Header Builder
+pub mod sdp;       // ✅ YENİ: SDP Codec Negotiation
 
 pub use header::{Header, HeaderName};
 pub use packet::{SipPacket, Method, Version};
