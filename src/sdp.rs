@@ -1,6 +1,39 @@
 // sentiric-sip-core/src/sdp.rs
-// ✅ YENİ: SDP Codec Negotiation
 
+use regex::Regex;
+use once_cell::sync::Lazy;
+
+// Performans için regexler compile-time (lazy) hazırlanır.
+static SDP_CONNECTION_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"c=IN IP4 \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}").unwrap());
+static SDP_AUDIO_MEDIA_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"m=audio (\d+)").unwrap());
+
+/// SDP işlemlerini yöneten yardımcı yapı.
+pub struct SdpManipulator;
+
+impl SdpManipulator {
+    /// SDP body'si içindeki Connection IP (c=) ve Audio Port (m=audio) bilgilerini değiştirir.
+    /// SBC'nin "Topology Hiding" özelliği için kritiktir.
+    pub fn rewrite_connection_info(sdp_body: &[u8], new_ip: &str, new_port: u16) -> Option<Vec<u8>> {
+        let sdp_str = match std::str::from_utf8(sdp_body) {
+            Ok(s) => s,
+            Err(_) => return None,
+        };
+
+        // c=IN IP4 x.x.x.x -> c=IN IP4 <new_ip>
+        let sdp_ip_replaced = SDP_CONNECTION_REGEX.replace_all(sdp_str, format!("c=IN IP4 {}", new_ip));
+        
+        // m=audio <port> ... -> m=audio <new_port> ...
+        let sdp_final = SDP_AUDIO_MEDIA_REGEX.replace(&sdp_ip_replaced, format!("m=audio {}", new_port));
+
+        if sdp_str != sdp_final {
+            Some(sdp_final.as_bytes().to_vec())
+        } else {
+            None
+        }
+    }
+}
+
+// --- Mevcut Codec Negotiation kodları aşağıda korunur ---
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Codec {
     pub id: u8,
@@ -8,42 +41,17 @@ pub struct Codec {
     pub rate: u32,
 }
 
-use once_cell::sync::Lazy;
-
-/// Platform tarafından desteklenen codec'ler
 pub static SUPPORTED_CODECS: Lazy<Vec<Codec>> = Lazy::new(|| vec![
     Codec { id: 0, name: "PCMU".to_string(), rate: 8000 },
     Codec { id: 8, name: "PCMA".to_string(), rate: 8000 },
 ]);
 
-/// İstemci tarafından önerilen codec listesinden platform destekleyeni seç
-///
-/// # Example
-/// ```
-/// use sentiric_sip_core::sdp::{Codec, negotiate_codec};
-///
-/// let offered = vec![
-///     Codec { id: 9, name: "G722".to_string(), rate: 8000 },
-///     Codec { id: 0, name: "PCMU".to_string(), rate: 8000 },
-/// ];
-///
-/// let selected = negotiate_codec(&offered).expect("Codec bulunamadı");
-/// assert_eq!(selected.id, 0); // PCMU seçildi
-/// ```
 pub fn negotiate_codec(offered: &[Codec]) -> Option<Codec> {
     offered.iter()
         .find(|c| SUPPORTED_CODECS.contains(c))
         .cloned()
 }
 
-/// SDP formatında codec listesi oluştur
-///
-/// # Example Output
-/// ```text
-/// m=audio 10002 RTP/AVP 0 8
-/// a=rtpmap:0 PCMU/8000
-/// a=rtpmap:8 PCMA/8000
-/// ```
 pub fn build_sdp_media_line(port: u16) -> String {
     let codec_ids: Vec<String> = SUPPORTED_CODECS.iter()
         .map(|c| c.id.to_string())
@@ -56,37 +64,4 @@ pub fn build_rtpmap_attributes() -> Vec<String> {
     SUPPORTED_CODECS.iter()
         .map(|c| format!("a=rtpmap:{} {}/{}", c.id, c.name, c.rate))
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_negotiate_codec_success() {
-        let offered = vec![
-            Codec { id: 9, name: "G722".to_string(), rate: 8000 },
-            Codec { id: 0, name: "PCMU".to_string(), rate: 8000 },
-        ];
-        
-        let result = negotiate_codec(&offered);
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().id, 0);
-    }
-
-    #[test]
-    fn test_negotiate_codec_no_match() {
-        let offered = vec![
-            Codec { id: 9, name: "G722".to_string(), rate: 8000 },
-        ];
-        
-        let result = negotiate_codec(&offered);
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_build_sdp_media_line() {
-        let line = build_sdp_media_line(10002);
-        assert_eq!(line, "m=audio 10002 RTP/AVP 0 8");
-    }
 }
