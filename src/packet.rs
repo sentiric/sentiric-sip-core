@@ -111,4 +111,25 @@ impl SipPacket {
 
         out
     }
+
+    /// Bir Request paketi için temel headerları kopyalayarak Response paketi oluşturur.
+    /// (Via, From, To, Call-ID, CSeq)
+    pub fn create_response_for(req: &SipPacket, code: u16, reason: String) -> Self {
+        let mut resp = SipPacket::new_response(code, reason);
+        
+        // Header Copy Logic (Standart RFC 3261)
+        for h in &req.headers {
+            match h.name {
+                crate::header::HeaderName::Via | 
+                crate::header::HeaderName::From | 
+                crate::header::HeaderName::To | 
+                crate::header::HeaderName::CallId | 
+                crate::header::HeaderName::CSeq => {
+                    resp.headers.push(h.clone());
+                }
+                _ => {}
+            }
+        }
+        resp
+    }    
 }
