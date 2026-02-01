@@ -72,41 +72,32 @@ impl SipRouter {
         
         let protocol_part = parts[1];
         let params: Vec<&str> = protocol_part.split(';').collect();
-        let mut host_part = params[0].to_string(); 
         
-        let mut rport: Option<String> = None;
+        let mut rport: Option<u16> = None;
         let mut received: Option<String> = None;
 
         for param in &params[1..] {
-             let p_trim = param.trim();
+            let p_trim = param.trim();
             if let Some((k, v)) = p_trim.split_once('=') {
                 if k == "received" { received = Some(v.to_string()); }
-                if k == "rport" { rport = Some(v.to_string()); }
-            } else if p_trim == "rport" {
-                rport = Some("".to_string());
+                if k == "rport" { rport = v.parse::<u16>().ok(); }
             }
         }
 
-        // 1. NAT Traversal Önceliği: received ve rport
-        if let (Some(rec), Some(rp)) = (received, rport) {
-            if !rp.is_empty() {
-                return format!("{}:{}", rec, rp).parse().ok();
-            } else {
-                // rport var ama boş, received kullan. Portu host'tan çıkar veya default.
-                if host_part.contains(':') {
-                    if let Some(port_part) = host_part.split(':').last() {
-                        return format!("{}:{}", rec, port_part).parse().ok();
-                    }
-                }
-                return format!("{}:{}", rec, default_port).parse().ok();
-            }
+        // Eğer 'received' varsa, bu dış IP'dir. 
+        // Eğer 'rport' varsa, bu dış porttur.
+        if let Some(ip) = received {
+            let port = rport.unwrap_or(default_port);
+            return format!("{}:{}", ip, port).parse().ok();
         }
 
-        // 2. Direct Routing
-        if !host_part.contains(':') {
-             host_part = format!("{}:{}", host_part, default_port);
+        // Fallback: Standart host:port parse
+        let host_port = params[0];
+        if !host_port.contains(':') {
+             format!("{}:{}", host_port, default_port).parse().ok()
+        } else {
+             host_port.parse().ok()
         }
-        host_part.parse().ok()
     }
     
     /// Standart bir Via başlığı oluşturur (Eski metod - backward compatibility)
