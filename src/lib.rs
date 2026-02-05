@@ -10,7 +10,8 @@ pub mod profiles;
 pub mod transport;
 pub mod builder;
 pub mod sdp;
-pub mod routing; // YENİ EKLENDİ
+pub mod routing;
+pub mod transaction; // ✅ EKLENDİ
 
 pub use header::{Header, HeaderName};
 pub use packet::{SipPacket, Method, Version};
@@ -18,5 +19,6 @@ pub use uri::SipUri;
 pub use error::SipError;
 pub use profiles::{SipProfile, create_profile};
 pub use transport::SipTransport;
-// Kolay erişim için routing trait'ini dışarı açıyoruz
 pub use routing::SipRouter;
+// ✅ Transaction tiplerini dışarı açıyoruz
+pub use transaction::{TransactionEngine, SipTransaction, TransactionAction, TransactionState};

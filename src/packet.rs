@@ -1,9 +1,11 @@
-// src/packet.rs
+// sentiric-sip-core/src/packet.rs
 
 use crate::header::{Header, HeaderName};
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq)]
+/// SIP Methods (RFC 3261)
+/// Hash ve Eq eklendi.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Method {
     Invite,
     Ack,
@@ -28,7 +30,8 @@ impl fmt::Display for Method {
     }
 }
 
-#[derive(Debug, Clone)]
+/// SIP Version
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Version {
     V2,
 }
