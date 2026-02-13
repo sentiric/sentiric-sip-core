@@ -115,6 +115,16 @@ impl SipPacket {
         }
     }
 
+    /// Paketin bir istek olup olmadığını döner.
+    pub fn is_request(&self) -> bool {
+        self.is_request
+    }
+
+    /// Paketin bir yanıt olup olmadığını döner.
+    pub fn is_response(&self) -> bool {
+        !self.is_request
+    }    
+
     /// Paketi ağa gönderilecek byte dizisine çevirir
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::new();
