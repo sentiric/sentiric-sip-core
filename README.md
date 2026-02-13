@@ -1,11 +1,25 @@
-# Sentiric SIP Core Library
+# 📡 Sentiric SIP Core (v1.5.1)
 
-Bu kütüphane, Sentiric ekosistemi için **RFC 3261** uyumlu, performans odaklı ve bağımlılık içermeyen SIP paket işleyicisidir.
+[![Status](https://img.shields.io/badge/status-production-green.svg)]()
+[![Language](https://img.shields.io/badge/language-Rust-orange.svg)]()
 
-## Özellikler
-*   **Zero-Dependency:** `std` dışında hiçbir kütüphane kullanmaz.
-*   **Strict Typing:** Header ve Metodlar enum tabanlıdır, hata yapmayı zorlaştırır.
-*   **Sippy Compatible:** Sippy Softswitch ve katı firewall kuralları için özel header yönetimi.
+**Sentiric SIP Core**, Sentiric telekomünikasyon altyapısının temel taşıdır. RFC 3261 uyumlu SIP paketlerinin oluşturulması, ayrıştırılması (parsing) ve yönlendirme mantığı (routing logic) için gereken tüm araçları sağlar.
 
-## Kullanım
-Bu kütüphane tek başına çalışmaz. `sip-uas` veya `sip-uac` projelerine dependency olarak eklenmelidir.
+**Felsefe:** "Stateless, Safe, Zero-Allocation where possible."
+
+## 🚀 Özellikler
+
+1.  **Strict Parsing:** Hatalı SIP paketlerini ağ geçidinde (Edge) tespit eder ve reddeder.
+2.  **Routing Helpers:** `detect_loop`, `decrement_max_forwards` gibi güvenlik kontrollerini standartlaştırır.
+3.  **Topology Hiding:** SBC servisleri için `apply_topology_hiding` ile güvenli Contact header manipülasyonu sağlar.
+4.  **Transaction Safety:** `SipTransaction` yapısı ile paketlerin durumunu (State) takip etmeyi kolaylaştırır.
+5.  **Builder Pattern:** `SipResponseFactory` ve `SipRouter` ile güvenli paket oluşturma.
+
+## 📦 Kurulum
+
+Bu kütüphane, Sentiric ekosistemindeki diğer servisler (`proxy`, `sbc`, `b2bua`, `media`) tarafından temel bağımlılık olarak kullanılır.
+
+```toml
+[dependencies]
+sentiric-sip-core = { git = "https://github.com/sentiric/sentiric-sip-core.git", tag = "v1.5.1" }
+```s
