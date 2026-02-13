@@ -6,6 +6,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::net::SocketAddr;
+use crate::packet::SipPacket;
+use crate::header::{Header, HeaderName};
 
 pub fn generate_branch_id() -> String {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
@@ -20,6 +22,7 @@ pub fn generate_tag(seed: &str) -> String {
     format!("{:x}", hasher.finish())
 }
 
+// Geliştirilmiş Regex (RFC 3261 uyumlu)
 static AOR_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"(?i)\s*"?([^"]*)"?\s*<sips?:([^>]+)>|sips?:([\w.-]+@[\w.-]+)(;[^>]+)?"#).unwrap()
 });
@@ -28,9 +31,7 @@ pub fn extract_aor(raw_val: &str) -> String {
     if let Some(caps) = AOR_REGEX.captures(raw_val) {
         if let Some(addr_spec) = caps.get(2).or(caps.get(3)) {
             let mut aor = addr_spec.as_str().to_string();
-            if let Some(at_pos) = aor.find('@') {
-                if let Some(colon_pos) = aor[at_pos..].find(':') { aor.truncate(at_pos + colon_pos); }
-            }
+            // Parametreleri temizle
             if let Some(semi_pos) = aor.find(';') { aor.truncate(semi_pos); }
             return aor;
         }
@@ -42,20 +43,18 @@ pub fn extract_username_from_uri(uri: &str) -> String {
     let clean = uri.trim();
     let without_scheme = if let Some(idx) = clean.find(':') { &clean[idx+1..] } else { clean };
     let user_part = if let Some(idx) = without_scheme.find('@') { &without_scheme[..idx] } else { without_scheme };
-    if let Some(idx) = user_part.find(';') { user_part[..idx].to_string() } else { user_part.to_string() }
-        .replace('<', "").replace('>', "")
+    
+    // Parametreleri temizle ve < > karakterlerini kaldır
+    let pure_user = if let Some(idx) = user_part.find(';') { &user_part[..idx] } else { user_part };
+    pure_user.replace('<', "").replace('>', "")
 }
 
-// --- YENİ EKLENEN: Socket Address Çıkarıcı ---
 pub fn extract_socket_addr(uri: &str) -> Option<SocketAddr> {
     let mut s = uri.trim();
     s = s.trim_start_matches('<').trim_end_matches('>');
     if s.starts_with("sip:") { s = &s[4..]; } else if s.starts_with("sips:") { s = &s[5..]; }
     
-    // uri parametrelerini temizle (;tag=... gibi)
     let host_port_part = if let Some(semi_idx) = s.find(';') { &s[..semi_idx] } else { s };
-    
-    // user@host:port ayrımı
     let host_port = if let Some(at_idx) = host_port_part.find('@') { &host_port_part[at_idx + 1..] } else { host_port_part };
     
     if !host_port.contains(':') { 
@@ -63,4 +62,44 @@ pub fn extract_socket_addr(uri: &str) -> Option<SocketAddr> {
     } else { 
         host_port.parse().ok() 
     }
+}
+
+// --- [YENİ]: TOPOLOGY HIDING ---
+// Bu fonksiyon SBC servisi tarafından kullanılacak.
+// Packet içindeki Contact başlığını, belirtilen public_ip ve public_port ile değiştirir.
+// Kullanıcı adını (user part) korur.
+pub fn apply_topology_hiding(packet: &mut SipPacket, public_ip: &str, public_port: u16) -> bool {
+    // Sadece 180-299 arası cevaplarda ve INVITE/REGISTER isteklerinde mantıklıdır.
+    // Ancak genellikle SBC bunu 200 OK cevaplarında yapar.
+    
+    let old_contact_val = match packet.get_header_value(HeaderName::Contact) {
+        Some(v) => v.clone(),
+        None => {
+            // Contact yoksa ekle (Varsayılan davranış)
+            let new_contact = format!("<sip:sbc@{}:{}>", public_ip, public_port);
+            packet.headers.push(Header::new(HeaderName::Contact, new_contact));
+            return true;
+        }
+    };
+
+    // Zaten public IP içeriyorsa dokunma
+    if old_contact_val.contains(public_ip) {
+        return false;
+    }
+
+    // Kullanıcı adını koru (sip:b2bua@10.0.0.1 -> sip:b2bua@public_ip)
+    let user_part = extract_username_from_uri(&old_contact_val);
+    let final_user = if user_part.is_empty() { "sbc" } else { &user_part };
+
+    let new_contact = format!("<sip:{}@{}:{}>", final_user, public_ip, public_port);
+
+    // Header'ı güncelle
+    for h in &mut packet.headers {
+        if h.name == HeaderName::Contact {
+            h.value = new_contact.clone();
+            return true;
+        }
+    }
+    
+    false
 }

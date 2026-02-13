@@ -4,7 +4,6 @@ use crate::header::{Header, HeaderName};
 use std::fmt;
 
 /// SIP Methods (RFC 3261)
-/// Hash ve Eq eklendi.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Method {
     Invite,
@@ -26,6 +25,20 @@ impl fmt::Display for Method {
             Method::Options => write!(f, "OPTIONS"),
             Method::Register => write!(f, "REGISTER"),
             Method::Other(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+impl Method {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Method::Invite => "INVITE",
+            Method::Ack => "ACK",
+            Method::Bye => "BYE",
+            Method::Cancel => "CANCEL",
+            Method::Options => "OPTIONS",
+            Method::Register => "REGISTER",
+            Method::Other(s) => s.as_str(),
         }
     }
 }
@@ -83,6 +96,25 @@ impl SipPacket {
         self.headers.iter().find(|h| h.name == name).map(|h| &h.value)
     }
 
+    /// Paketin bir "In-Dialog" (Diyalog içi) istek olup olmadığını kontrol eder.
+    /// Proxy Service'in Dialplan'a gidip gitmeyeceğine karar vermesi için kritiktir.
+    pub fn is_in_dialog_request(&self) -> bool {
+        if !self.is_request { return false; }
+        
+        // ACK, BYE ve CANCEL her zaman var olan bir diyalog veya işlemle ilgilidir.
+        match self.method {
+            Method::Ack | Method::Bye | Method::Cancel => true,
+            _ => {
+                // Diğer metodlar için (INVITE vb.), 'To' başlığında 'tag' parametresi varsa
+                // bu genellikle bir re-INVITE veya diyalog içi işlemdir.
+                if let Some(to_val) = self.get_header_value(HeaderName::To) {
+                    return to_val.contains(";tag=");
+                }
+                false
+            }
+        }
+    }
+
     /// Paketi ağa gönderilecek byte dizisine çevirir
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::new();
@@ -100,7 +132,6 @@ impl SipPacket {
         }
 
         // 3. Content-Length (Otomatik Ekle)
-        // Eğer body varsa ve header eklenmemişse biz ekleriz.
         let has_content_length = self.headers.iter().any(|h| h.name == HeaderName::ContentLength);
         if !has_content_length {
             out.extend_from_slice(format!("Content-Length: {}\r\n", self.body.len()).as_bytes());
@@ -116,18 +147,17 @@ impl SipPacket {
     }
 
     /// Bir Request paketi için temel headerları kopyalayarak Response paketi oluşturur.
-    /// (Via, From, To, Call-ID, CSeq)
     pub fn create_response_for(req: &SipPacket, code: u16, reason: String) -> Self {
         let mut resp = SipPacket::new_response(code, reason);
         
-        // Header Copy Logic (Standart RFC 3261)
         for h in &req.headers {
             match h.name {
                 crate::header::HeaderName::Via | 
                 crate::header::HeaderName::From | 
                 crate::header::HeaderName::To | 
                 crate::header::HeaderName::CallId | 
-                crate::header::HeaderName::CSeq => {
+                crate::header::HeaderName::CSeq |
+                crate::header::HeaderName::RecordRoute => {
                     resp.headers.push(h.clone());
                 }
                 _ => {}
