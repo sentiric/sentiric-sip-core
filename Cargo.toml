@@ -1,6 +1,6 @@
 [package]
 name = "sentiric-sip-core"
-version = "1.5.1" # Major feature bump
+version = "1.5.2"
 edition = "2021"
 description = "High-performance SIP (RFC 3261) engine with transaction safety and RFC-compliant URI parsing."
 authors = ["Sentiric Team"]

@@ -22,7 +22,6 @@ pub fn generate_tag(seed: &str) -> String {
     format!("{:x}", hasher.finish())
 }
 
-// Geliştirilmiş Regex (RFC 3261 uyumlu)
 static AOR_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"(?i)\s*"?([^"]*)"?\s*<sips?:([^>]+)>|sips?:([\w.-]+@[\w.-]+)(;[^>]+)?"#).unwrap()
 });
@@ -31,7 +30,6 @@ pub fn extract_aor(raw_val: &str) -> String {
     if let Some(caps) = AOR_REGEX.captures(raw_val) {
         if let Some(addr_spec) = caps.get(2).or(caps.get(3)) {
             let mut aor = addr_spec.as_str().to_string();
-            // Parametreleri temizle
             if let Some(semi_pos) = aor.find(';') { aor.truncate(semi_pos); }
             return aor;
         }
@@ -44,7 +42,6 @@ pub fn extract_username_from_uri(uri: &str) -> String {
     let without_scheme = if let Some(idx) = clean.find(':') { &clean[idx+1..] } else { clean };
     let user_part = if let Some(idx) = without_scheme.find('@') { &without_scheme[..idx] } else { without_scheme };
     
-    // Parametreleri temizle ve < > karakterlerini kaldır
     let pure_user = if let Some(idx) = user_part.find(';') { &user_part[..idx] } else { user_part };
     pure_user.replace('<', "").replace('>', "")
 }
@@ -64,36 +61,32 @@ pub fn extract_socket_addr(uri: &str) -> Option<SocketAddr> {
     }
 }
 
-// --- [YENİ]: TOPOLOGY HIDING ---
-// Bu fonksiyon SBC servisi tarafından kullanılacak.
-// Packet içindeki Contact başlığını, belirtilen public_ip ve public_port ile değiştirir.
-// Kullanıcı adını (user part) korur.
+// --- [FIX]: STRICT TOPOLOGY HIDING ---
+// Artık sadece IP değil, PORT eşleşmesini de kontrol ediyoruz.
 pub fn apply_topology_hiding(packet: &mut SipPacket, public_ip: &str, public_port: u16) -> bool {
-    // Sadece 180-299 arası cevaplarda ve INVITE/REGISTER isteklerinde mantıklıdır.
-    // Ancak genellikle SBC bunu 200 OK cevaplarında yapar.
-    
     let old_contact_val = match packet.get_header_value(HeaderName::Contact) {
         Some(v) => v.clone(),
         None => {
-            // Contact yoksa ekle (Varsayılan davranış)
             let new_contact = format!("<sip:sbc@{}:{}>", public_ip, public_port);
             packet.headers.push(Header::new(HeaderName::Contact, new_contact));
             return true;
         }
     };
 
-    // Zaten public IP içeriyorsa dokunma
-    if old_contact_val.contains(public_ip) {
-        return false;
+    // [YENİ MANTIK]: Beklenen "PublicIP:PublicPort" kombinasyonunu tam olarak arıyoruz.
+    // Eğer port farklıysa (örn: 13084), IP aynı olsa bile rewrite yapılmalı.
+    let expected_signature = format!("{}:{}", public_ip, public_port);
+    
+    if old_contact_val.contains(&expected_signature) {
+        return false; // Zaten doğru (34.122...:5060)
     }
 
-    // Kullanıcı adını koru (sip:b2bua@10.0.0.1 -> sip:b2bua@public_ip)
+    // Kullanıcı adını koru
     let user_part = extract_username_from_uri(&old_contact_val);
     let final_user = if user_part.is_empty() { "sbc" } else { &user_part };
 
     let new_contact = format!("<sip:{}@{}:{}>", final_user, public_ip, public_port);
 
-    // Header'ı güncelle
     for h in &mut packet.headers {
         if h.name == HeaderName::Contact {
             h.value = new_contact.clone();
