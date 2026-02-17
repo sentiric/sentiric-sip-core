@@ -5,6 +5,7 @@ pub struct SdpManipulator;
 
 impl SdpManipulator {
     /// Boşluk ve format bağımsız SDP IP/Port değiştirici (v1.5.4)
+    /// IP eşleşse bile portu zorla değiştiren mantık (v1.5.5)
     pub fn rewrite_connection_info(sdp_body: &[u8], new_ip: &str, new_port: u16) -> Option<Vec<u8>> {
         let sdp_str = std::str::from_utf8(sdp_body).ok()?;
         let mut new_sdp = String::with_capacity(sdp_str.len());
@@ -12,26 +13,29 @@ impl SdpManipulator {
 
         for line in sdp_str.lines() {
             let trimmed = line.trim();
-            if trimmed.is_empty() { continue; }
-
             if trimmed.starts_with("c=IN IP4") {
-                let _ = writeln!(new_sdp, "c=IN IP4 {}", new_ip);
-                modified = true;
+                let current_ip = trimmed.split_whitespace().last().unwrap_or("");
+                if current_ip != new_ip {
+                    let _ = writeln!(new_sdp, "c=IN IP4 {}", new_ip);
+                    modified = true;
+                    continue;
+                }
             } else if trimmed.starts_with("m=audio") {
                 let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                if parts.len() >= 4 {
-                    let proto = parts[2];
-                    let payloads = parts[3..].join(" ");
-                    let _ = writeln!(new_sdp, "m=audio {} {} {}", new_port, proto, payloads);
-                    modified = true;
-                } else {
-                    new_sdp.push_str(line);
-                    new_sdp.push_str("\r\n");
+                if parts.len() >= 2 {
+                    let current_port = parts[1];
+                    // [CRITICAL]: Mevcut port kiraladığımız porttan farklıysa (örn: 50000 != 30002) ZORLA DEĞİŞTİR
+                    if current_port != new_port.to_string() {
+                        let proto = parts[2];
+                        let payloads = parts[3..].join(" ");
+                        let _ = writeln!(new_sdp, "m=audio {} {} {}", new_port, proto, payloads);
+                        modified = true;
+                        continue;
+                    }
                 }
-            } else {
-                new_sdp.push_str(line);
-                new_sdp.push_str("\r\n");
             }
+            new_sdp.push_str(line);
+            new_sdp.push_str("\r\n");
         }
         if modified { Some(new_sdp.into_bytes()) } else { None }
     }
