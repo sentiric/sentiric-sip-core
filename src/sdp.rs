@@ -1,47 +1,79 @@
+// sentiric-sip-core/src/sdp.rs
 use std::fmt::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::{debug, warn}; // GÖZLEMLENEBİLİRLİK EKLENDİ
 
 pub struct SdpManipulator;
 
 impl SdpManipulator {
-    /// Boşluk ve format bağımsız SDP IP/Port değiştirici (v1.5.4)
-    /// IP eşleşse bile portu zorla değiştiren mantık (v1.5.5)
+    /// Boşluk ve format bağımsız SDP IP/Port değiştirici (v1.5.6 - Observable)
     pub fn rewrite_connection_info(sdp_body: &[u8], new_ip: &str, new_port: u16) -> Option<Vec<u8>> {
-        let sdp_str = std::str::from_utf8(sdp_body).ok()?;
-        let mut new_sdp = String::with_capacity(sdp_str.len());
+        let sdp_str = match std::str::from_utf8(sdp_body) {
+            Ok(s) => s,
+            Err(_) => {
+                warn!(event="SDP_UTF8_ERROR", "SDP body is not valid UTF-8");
+                return None;
+            }
+        };
+
+        let mut new_sdp = String::with_capacity(sdp_str.len() + 50);
         let mut modified = false;
+        let mut old_ip = String::new();
+        let mut old_port = String::new();
 
         for line in sdp_str.lines() {
             let trimmed = line.trim();
+            
+            // 1. Connection (c=) satırını değiştir
             if trimmed.starts_with("c=IN IP4") {
-                let current_ip = trimmed.split_whitespace().last().unwrap_or("");
-                if current_ip != new_ip {
-                    let _ = writeln!(new_sdp, "c=IN IP4 {}", new_ip);
+                old_ip = trimmed.split_whitespace().last().unwrap_or("").to_string();
+                let _ = writeln!(new_sdp, "c=IN IP4 {}", new_ip);
+                modified = true;
+                continue;
+            } 
+            
+            // 2. Media (m=) satırını değiştir
+            if trimmed.starts_with("m=audio") {
+                let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                if parts.len() >= 4 {
+                    old_port = parts[1].to_string();
+                    let proto = parts[2];
+                    let payloads = parts[3..].join(" ");
+                    let _ = writeln!(new_sdp, "m=audio {} {} {}", new_port, proto, payloads);
                     modified = true;
                     continue;
                 }
-            } else if trimmed.starts_with("m=audio") {
+            }
+            
+            // 3. Origin (o=) satırını değiştir (Strict client uyumluluğu için)
+            if trimmed.starts_with("o=") {
                 let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    let current_port = parts[1];
-                    // [CRITICAL]: Mevcut port kiraladığımız porttan farklıysa (örn: 50000 != 30002) ZORLA DEĞİŞTİR
-                    if current_port != new_port.to_string() {
-                        let proto = parts[2];
-                        let payloads = parts[3..].join(" ");
-                        let _ = writeln!(new_sdp, "m=audio {} {} {}", new_port, proto, payloads);
-                        modified = true;
-                        continue;
-                    }
+                if parts.len() >= 6 && parts[4] == "IP4" {
+                    let _ = writeln!(new_sdp, "{} {} {} {} {} {}", parts[0], parts[1], parts[2], parts[3], parts[4], new_ip);
+                    modified = true;
+                    continue;
                 }
             }
+
             new_sdp.push_str(line);
             new_sdp.push_str("\r\n");
         }
-        if modified { Some(new_sdp.into_bytes()) } else { None }
+        
+        if modified { 
+            debug!(
+                event="SDP_MUTATION_DETAIL", 
+                old_ip=%old_ip, new_ip=%new_ip, 
+                old_port=%old_port, new_port=%new_port,
+                "SDP içeriği dönüştürüldü"
+            );
+            Some(new_sdp.into_bytes()) 
+        } else { 
+            None 
+        }
     }
 }
 
-// --- B2BUA İÇİN GERİ GETİRİLEN BUILDER ---
+// --- B2BUA İÇİN BUILDER (DEĞİŞMEDİ) ---
 #[derive(Debug, Clone)]
 pub struct Codec {
     pub id: u8,
