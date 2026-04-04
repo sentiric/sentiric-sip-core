@@ -1,9 +1,9 @@
 // sentiric-sip-core/src/transport.rs
 
+use crate::error::SipError;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::UdpSocket;
-use crate::error::SipError;
 
 pub struct SipTransport {
     socket: Arc<UdpSocket>,
@@ -12,15 +12,16 @@ pub struct SipTransport {
 
 impl SipTransport {
     pub async fn new(bind_addr: &str) -> Result<Self, SipError> {
-        let socket = UdpSocket::bind(bind_addr).await
+        let socket = UdpSocket::bind(bind_addr)
+            .await
             .map_err(|e| SipError::NetworkError(format!("Bind hatası: {}", e)))?;
-        
+
         Ok(Self {
             socket: Arc::new(socket),
             buf_size: 65535, // Standart UDP MTU üstü güvenli alan
         })
     }
-    
+
     /// Mevcut bir soketi kullanarak transport oluşturur (Paylaşılan soketler için)
     pub fn from_socket(socket: Arc<UdpSocket>) -> Self {
         Self {
@@ -37,7 +38,11 @@ impl SipTransport {
             match self.socket.recv_from(&mut buf).await {
                 Ok((len, addr)) => {
                     // Temel Validasyon: Çok kısa veya sadece ping (CRLF) paketlerini atla
-                    if len < 4 || buf[..len].iter().all(|&b| b == b'\r' || b == b'\n' || b == 0) {
+                    if len < 4
+                        || buf[..len]
+                            .iter()
+                            .all(|&b| b == b'\r' || b == b'\n' || b == 0)
+                    {
                         continue;
                     }
                     return Ok((buf[..len].to_vec(), addr));
@@ -48,11 +53,13 @@ impl SipTransport {
     }
 
     pub async fn send(&self, data: &[u8], target: SocketAddr) -> Result<(), SipError> {
-        self.socket.send_to(data, target).await
+        self.socket
+            .send_to(data, target)
+            .await
             .map_err(|e| SipError::NetworkError(e.to_string()))?;
         Ok(())
     }
-    
+
     pub fn get_socket(&self) -> Arc<UdpSocket> {
         self.socket.clone()
     }

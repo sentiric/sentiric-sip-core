@@ -17,7 +17,11 @@ impl SipRouter {
 
     /// Paketin en üstündeki Via başlığını kaldırır (Response Processing).
     pub fn strip_top_via(packet: &mut SipPacket) -> Option<Header> {
-        if let Some(pos) = packet.headers.iter().position(|h| h.name == HeaderName::Via) {
+        if let Some(pos) = packet
+            .headers
+            .iter()
+            .position(|h| h.name == HeaderName::Via)
+        {
             return Some(packet.headers.remove(pos));
         }
         None
@@ -25,19 +29,23 @@ impl SipRouter {
 
     /// Pakete NAT uyumlu (rport, received) parametrelerini işler.
     pub fn fix_nat_via(packet: &mut SipPacket, src_addr: SocketAddr) {
-        if let Some(via_header) = packet.headers.iter_mut().find(|h| h.name == HeaderName::Via) {
+        if let Some(via_header) = packet
+            .headers
+            .iter_mut()
+            .find(|h| h.name == HeaderName::Via)
+        {
             let mut new_val = via_header.value.clone();
-            
+
             if !new_val.contains("received=") {
                 new_val.push_str(&format!(";received={}", src_addr.ip()));
             }
-            
+
             if new_val.contains(";rport") && !new_val.contains(";rport=") {
-                 new_val = new_val.replace(";rport", &format!(";rport={}", src_addr.port()));
+                new_val = new_val.replace(";rport", &format!(";rport={}", src_addr.port()));
             } else if !new_val.contains("rport") {
-                 new_val.push_str(&format!(";rport={}", src_addr.port()));
+                new_val.push_str(&format!(";rport={}", src_addr.port()));
             }
-            
+
             via_header.value = new_val;
         }
     }
@@ -51,19 +59,25 @@ impl SipRouter {
     /// Yanıtın döneceği adresi `Via` başlığından çözer.
     pub fn resolve_response_target(via_val: &str, default_port: u16) -> Option<SocketAddr> {
         let parts: Vec<&str> = via_val.split_whitespace().collect();
-        if parts.len() < 2 { return None; }
-        
+        if parts.len() < 2 {
+            return None;
+        }
+
         let protocol_part = parts[1];
         let params: Vec<&str> = protocol_part.split(';').collect();
-        
+
         let mut rport: Option<u16> = None;
         let mut received: Option<String> = None;
 
         for param in &params[1..] {
             let p_trim = param.trim();
             if let Some((k, v)) = p_trim.split_once('=') {
-                if k == "received" { received = Some(v.to_string()); }
-                if k == "rport" { rport = v.parse::<u16>().ok(); }
+                if k == "received" {
+                    received = Some(v.to_string());
+                }
+                if k == "rport" {
+                    rport = v.parse::<u16>().ok();
+                }
             }
         }
 
@@ -74,9 +88,9 @@ impl SipRouter {
 
         let host_port = params[0];
         if !host_port.contains(':') {
-             format!("{}:{}", host_port, default_port).parse().ok()
+            format!("{}:{}", host_port, default_port).parse().ok()
         } else {
-             host_port.parse().ok()
+            host_port.parse().ok()
         }
     }
 
@@ -109,7 +123,7 @@ impl SipRouter {
         }
 
         mf_val -= 1;
-        
+
         if mf_val <= 0 {
             return Err(());
         }
@@ -117,9 +131,11 @@ impl SipRouter {
         if let Some(idx) = mf_idx {
             packet.headers[idx].value = mf_val.to_string();
         } else {
-            packet.headers.push(Header::new(HeaderName::MaxForwards, mf_val.to_string()));
+            packet
+                .headers
+                .push(Header::new(HeaderName::MaxForwards, mf_val.to_string()));
         }
-        
+
         Ok(())
     }
 

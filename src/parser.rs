@@ -1,27 +1,32 @@
 // sentiric-sip-core/src/parser.rs
 
-use crate::packet::{SipPacket, Method};
-use crate::header::Header; // DÜZELTME: HeaderName kaldırıldı
 use crate::error::SipError;
+use crate::header::Header; // DÜZELTME: HeaderName kaldırıldı
+use crate::packet::{Method, SipPacket};
 use std::str;
 
 pub fn parse(data: &[u8]) -> Result<SipPacket, SipError> {
     let text = str::from_utf8(data)?;
-    
+
     // Header ve Body ayrımı (Çift CRLF)
     let mut parts = text.splitn(2, "\r\n\r\n");
-    let head_part = parts.next().ok_or(SipError::ParseError("Boş paket".into()))?;
+    let head_part = parts
+        .next()
+        .ok_or(SipError::ParseError("Boş paket".into()))?;
     let body_part = parts.next();
 
     let mut lines = head_part.lines();
-    let start_line = lines.next().ok_or(SipError::ParseError("Start line eksik".into()))?;
+    let start_line = lines
+        .next()
+        .ok_or(SipError::ParseError("Start line eksik".into()))?;
 
     // Request mi Response mu?
     let mut packet = if start_line.starts_with("SIP/2.0") {
         // RESPONSE
         let mut sl_parts = start_line.splitn(3, ' ');
         let _ver = sl_parts.next();
-        let code = sl_parts.next()
+        let code = sl_parts
+            .next()
             .ok_or(SipError::ParseError("Status code eksik".into()))?
             .parse::<u16>()
             .map_err(|_| SipError::ParseError("Geçersiz status code".into()))?;
@@ -30,9 +35,14 @@ pub fn parse(data: &[u8]) -> Result<SipPacket, SipError> {
     } else {
         // REQUEST
         let mut sl_parts = start_line.splitn(3, ' ');
-        let method_str = sl_parts.next().ok_or(SipError::ParseError("Method eksik".into()))?;
-        let uri = sl_parts.next().ok_or(SipError::ParseError("URI eksik".into()))?.to_string();
-        
+        let method_str = sl_parts
+            .next()
+            .ok_or(SipError::ParseError("Method eksik".into()))?;
+        let uri = sl_parts
+            .next()
+            .ok_or(SipError::ParseError("URI eksik".into()))?
+            .to_string();
+
         let method = match method_str {
             "INVITE" => Method::Invite,
             "ACK" => Method::Ack,
@@ -47,8 +57,10 @@ pub fn parse(data: &[u8]) -> Result<SipPacket, SipError> {
 
     // Headerları Parse Et
     for line in lines {
-        if line.trim().is_empty() { continue; }
-        
+        if line.trim().is_empty() {
+            continue;
+        }
+
         if let Some((key, value)) = line.split_once(':') {
             let header_name = Header::from_str(key);
             let header_val = value.trim().to_string();

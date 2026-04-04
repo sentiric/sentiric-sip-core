@@ -1,7 +1,7 @@
 // sentiric-sip-core/src/transaction.rs
 
-use crate::packet::{SipPacket, Method};
 use crate::header::HeaderName;
+use crate::packet::{Method, SipPacket};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransactionState {
@@ -25,7 +25,8 @@ pub struct SipTransaction {
 
 impl SipTransaction {
     pub fn new(req: &SipPacket) -> Option<Self> {
-        let branch = req.get_header_value(HeaderName::Via)?
+        let branch = req
+            .get_header_value(HeaderName::Via)?
             .split("branch=")
             .nth(1)?
             .split(';')

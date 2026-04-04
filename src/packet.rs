@@ -59,9 +59,9 @@ impl fmt::Display for Version {
 pub struct SipPacket {
     pub is_request: bool,
     pub method: Method,
-    pub uri: String,         // Request URI
-    pub status_code: u16,    // Response Code
-    pub reason: String,      // Response Reason
+    pub uri: String,      // Request URI
+    pub status_code: u16, // Response Code
+    pub reason: String,   // Response Reason
     pub headers: Vec<Header>,
     pub body: Vec<u8>,
 }
@@ -93,14 +93,19 @@ impl SipPacket {
 
     /// Belirli bir header'ın değerini güvenli şekilde alır
     pub fn get_header_value(&self, name: HeaderName) -> Option<&String> {
-        self.headers.iter().find(|h| h.name == name).map(|h| &h.value)
+        self.headers
+            .iter()
+            .find(|h| h.name == name)
+            .map(|h| &h.value)
     }
 
     /// Paketin bir "In-Dialog" (Diyalog içi) istek olup olmadığını kontrol eder.
     /// Proxy Service'in Dialplan'a gidip gitmeyeceğine karar vermesi için kritiktir.
     pub fn is_in_dialog_request(&self) -> bool {
-        if !self.is_request { return false; }
-        
+        if !self.is_request {
+            return false;
+        }
+
         // ACK, BYE ve CANCEL her zaman var olan bir diyalog veya işlemle ilgilidir.
         match self.method {
             Method::Ack | Method::Bye | Method::Cancel => true,
@@ -123,17 +128,19 @@ impl SipPacket {
     /// Paketin bir yanıt olup olmadığını döner.
     pub fn is_response(&self) -> bool {
         !self.is_request
-    }    
+    }
 
     /// Paketi ağa gönderilecek byte dizisine çevirir
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        
+
         // 1. Start Line
         if self.is_request {
             out.extend_from_slice(format!("{} {} SIP/2.0\r\n", self.method, self.uri).as_bytes());
         } else {
-            out.extend_from_slice(format!("SIP/2.0 {} {}\r\n", self.status_code, self.reason).as_bytes());
+            out.extend_from_slice(
+                format!("SIP/2.0 {} {}\r\n", self.status_code, self.reason).as_bytes(),
+            );
         }
 
         // 2. Headers
@@ -142,7 +149,10 @@ impl SipPacket {
         }
 
         // 3. Content-Length (Otomatik Ekle)
-        let has_content_length = self.headers.iter().any(|h| h.name == HeaderName::ContentLength);
+        let has_content_length = self
+            .headers
+            .iter()
+            .any(|h| h.name == HeaderName::ContentLength);
         if !has_content_length {
             out.extend_from_slice(format!("Content-Length: {}\r\n", self.body.len()).as_bytes());
         }
@@ -159,20 +169,20 @@ impl SipPacket {
     /// Bir Request paketi için temel headerları kopyalayarak Response paketi oluşturur.
     pub fn create_response_for(req: &SipPacket, code: u16, reason: String) -> Self {
         let mut resp = SipPacket::new_response(code, reason);
-        
+
         for h in &req.headers {
             match h.name {
-                crate::header::HeaderName::Via | 
-                crate::header::HeaderName::From | 
-                crate::header::HeaderName::To | 
-                crate::header::HeaderName::CallId | 
-                crate::header::HeaderName::CSeq |
-                crate::header::HeaderName::RecordRoute => {
+                crate::header::HeaderName::Via
+                | crate::header::HeaderName::From
+                | crate::header::HeaderName::To
+                | crate::header::HeaderName::CallId
+                | crate::header::HeaderName::CSeq
+                | crate::header::HeaderName::RecordRoute => {
                     resp.headers.push(h.clone());
                 }
                 _ => {}
             }
         }
         resp
-    }    
+    }
 }

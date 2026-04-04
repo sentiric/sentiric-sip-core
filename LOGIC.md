@@ -1,19 +1,25 @@
-# 📡 SIP Core - Protokol Matbaası
+# 🧬 SIP Core Diagnostic & Testing Logic
 
-**Rol:** SIP ve SDP mesajlarını oluşturan ve ayrıştıran (Parse) dilsiz işçi.
+Bu belge, Sentiric SIP çekirdeğinin (Core) doğruluğunu, yönlendirme mantığını ve ağ seviyesindeki durumunu test etme prensiplerini içerir.
 
-## 1. Temel Sorumluluklar
+## 1. Canlı Ağ Analizi (Packet Sniffing)
+Çekirdek kütüphanenin `Via`, `Record-Route` ve `Contact` başlıklarını doğru manipüle edip etmediğini denetlemek için Kernel seviyesinde ağ analizi kullanılır.
 
-1.  **SDP Oluşturma (`SdpBuilder`):**
-    *   Dışarıdan verilen kodek listesini, IP ve Port bilgilerini standart RFC formatında metne döker.
-    *   `ptime` ve `rtcp` gibi özellikleri parametre olarak alır.
-    *   **Kendi fikri yoktur.** "G.729 ekleyeyim mi?" diye sormaz, ekle denirse ekler.
+**Sinyalleşme Analizi:**
+```bash
+sudo tcpdump -i any -n -s 0 -A udp port 5060 | grep -E "SIP/2.0|CSeq:|Call-ID|Contact" --line-buffered
+```
 
-2.  **SIP Manipülasyonu:**
-    *   `Via`, `Contact`, `Record-Route` başlıklarını okur ve yazar.
-    *   NAT arkasındaki IP'leri düzeltir (Fix NAT).
+**RTP (Medya) Trafiği Doğrulaması:**
+```bash
+sudo tcpdump -i any -n udp portrange 10000-20000
+```
 
-## 2. Yasaklar (Anti-Patterns)
+## 2. Sorun Giderme Mantığı (Troubleshooting)
+SIP Core, hataları spesifik state machine durumlarına göre loglar.
 
-*   ❌ **Konfigürasyon Tutmaz:** Hangi kodeğin öncelikli olduğunu bilmez. (Bunu `rtp-core` bilir).
-*   ❌ **Durum Tutmaz (Stateless):** Bir çağrının geçmişini bilmez, sadece o anki paketi işler.
+| Belirti | Kök Neden (Root Cause) | Çözüm (Logic Fix) |
+| :--- | :--- | :--- |
+| **Sürekli INVITE (Retransmission)** | `200 OK` istemciye ulaşmıyor. | `Contact` başlığındaki IP'nin NAT arkasında ezilip ezilmediğini (Topology Hiding) kontrol et. |
+| **ACK Gelmiyor** | İstemci `Record-Route` zincirini takip edemiyor. | `SipRouter::add_record_route` mantığını denetle. |
+| **Ses Yok (One-way Audio)** | SDP içindeki `c=IN IP4` adresi yanlış. | `SdpManipulator::rewrite_connection_info` işlevinin çalıştığından emin ol. |
